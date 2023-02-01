@@ -29,8 +29,34 @@ type Capabilities struct {
 	MutatesData bool
 }
 
-type baseConsumer interface {
+type Consumer[S any] interface {
 	Capabilities() Capabilities
+
+	Consume(ctx context.Context, data S) error
+}
+
+// ConsumeTracesFunc is a helper function that is similar to ConsumeTraces.
+type ConsumeFunc[S any] func(ctx context.Context, data S) error
+
+// ConsumeTraces calls f(ctx, ld).
+func (f ConsumeFunc[S]) Consume(ctx context.Context, data S) error {
+	return f(ctx, data)
+}
+
+type baseSignal[S any] struct {
+	*baseImpl
+	ConsumeFunc[S]
+}
+
+// NewTraces returns a Traces configured with the provided options.
+func NewConsumer[S any](consume ConsumeFunc[S], options ...Option) (Consumer[S], error) {
+	if consume == nil {
+		return nil, errNilFunc
+	}
+	return &baseSignal[S]{
+		baseImpl:    newBaseImpl(options...),
+		ConsumeFunc: consume,
+	}, nil
 }
 
 var errNilFunc = errors.New("nil consumer func")
@@ -65,36 +91,4 @@ func newBaseImpl(options ...Option) *baseImpl {
 	}
 
 	return bs
-}
-
-// SignalConsumer is an interface that receives pdata, processes it
-// as needed, and sends it to the next processing node if any or to the destination.
-type SignalConsumer[S any] interface {
-	baseConsumer
-	// ConsumeSignal receives S for consumption.
-	ConsumeSignal(ctx context.Context, data S) error
-}
-
-// ConsumeTracesFunc is a helper function that is similar to ConsumeTraces.
-type ConsumeSignalFunc[S any] func(ctx context.Context, data S) error
-
-// ConsumeTraces calls f(ctx, ld).
-func (f ConsumeSignalFunc[S]) ConsumeSignal(ctx context.Context, data S) error {
-	return f(ctx, data)
-}
-
-type baseSignal[S any] struct {
-	*baseImpl
-	ConsumeSignalFunc[S]
-}
-
-// NewTraces returns a Traces configured with the provided options.
-func NewSignal[S any](consume ConsumeSignalFunc[S], options ...Option) (SignalConsumer[S], error) {
-	if consume == nil {
-		return nil, errNilFunc
-	}
-	return &baseSignal[S]{
-		baseImpl:          newBaseImpl(options...),
-		ConsumeSignalFunc: consume,
-	}, nil
 }
