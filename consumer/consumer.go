@@ -35,25 +35,25 @@ type Consumer[S any] interface {
 	Consume(ctx context.Context, data S) error
 }
 
-// ConsumeTracesFunc is a helper function that is similar to ConsumeTraces.
+// ConsumeFunc is a helper function that is similar to Consume
 type ConsumeFunc[S any] func(ctx context.Context, data S) error
 
-// ConsumeTraces calls f(ctx, ld).
+// Consume calls f(ctx, ld).
 func (f ConsumeFunc[S]) Consume(ctx context.Context, data S) error {
 	return f(ctx, data)
 }
 
-type baseSignal[S any] struct {
+type baseConsumer[S any] struct {
 	*baseImpl
 	ConsumeFunc[S]
 }
 
-// NewTraces returns a Traces configured with the provided options.
+// NewConsumer returns a Consumer configured with the provided options.
 func NewConsumer[S any](consume ConsumeFunc[S], options ...Option) (Consumer[S], error) {
 	if consume == nil {
 		return nil, errNilFunc
 	}
-	return &baseSignal[S]{
+	return &baseConsumer[S]{
 		baseImpl:    newBaseImpl(options...),
 		ConsumeFunc: consume,
 	}, nil
