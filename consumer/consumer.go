@@ -29,33 +29,33 @@ type Capabilities struct {
 	MutatesData bool
 }
 
-type Consumer[S any] interface {
+type consumer[S any] interface {
 	Capabilities() Capabilities
 
 	Consume(ctx context.Context, data S) error
 }
 
-// ConsumeFunc is a helper function that is similar to Consume
-type ConsumeFunc[S any] func(ctx context.Context, data S) error
+// consumeFunc is a helper function that is similar to Consume
+type consumeFunc[S any] func(ctx context.Context, data S) error
 
 // Consume calls f(ctx, ld).
-func (f ConsumeFunc[S]) Consume(ctx context.Context, data S) error {
+func (f consumeFunc[S]) Consume(ctx context.Context, data S) error {
 	return f(ctx, data)
 }
 
 type baseConsumer[S any] struct {
 	*baseImpl
-	ConsumeFunc[S]
+	consumeFunc[S]
 }
 
-// NewConsumer returns a Consumer configured with the provided options.
-func NewConsumer[S any](consume ConsumeFunc[S], options ...Option) (Consumer[S], error) {
+// newConsumer returns a Consumer configured with the provided options.
+func newConsumer[S any](consume consumeFunc[S], options ...Option) (consumer[S], error) {
 	if consume == nil {
 		return nil, errNilFunc
 	}
 	return &baseConsumer[S]{
 		baseImpl:    newBaseImpl(options...),
-		ConsumeFunc: consume,
+		consumeFunc: consume,
 	}, nil
 }
 

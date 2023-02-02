@@ -23,7 +23,7 @@ import (
 // Metrics is an interface that receives pmetric.Metrics, processes it
 // as needed, and sends it to the next processing node if any or to the destination.
 type Metrics interface {
-	Consumer[pmetric.Metrics]
+	consumer[pmetric.Metrics]
 
 	// deprecated: use Metrics.Consume instead
 	ConsumeMetrics(ctx context.Context, md pmetric.Metrics) error
@@ -38,14 +38,14 @@ func (m baseMetrics) ConsumeMetrics(ctx context.Context, md pmetric.Metrics) err
 }
 
 // ConsumeMetricsFunc is a helper function that is similar to ConsumeMetrics.
-type ConsumeMetricsFunc = ConsumeFunc[pmetric.Metrics]
+type ConsumeMetricsFunc = consumeFunc[pmetric.Metrics]
 
 // NewMetrics returns a Metrics configured with the provided options.
 func NewMetrics(consume ConsumeMetricsFunc, options ...Option) (Metrics, error) {
 	if consume == nil {
 		return nil, errNilFunc
 	}
-	c, err := NewConsumer(consume, options...)
+	c, err := newConsumer(consume, options...)
 
 	if err != nil {
 		return nil, err

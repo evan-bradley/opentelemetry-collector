@@ -15,15 +15,44 @@
 package consumer // import "go.opentelemetry.io/collector/consumer"
 
 import (
+	"context"
+
 	"go.opentelemetry.io/collector/pdata/plog"
 )
 
 // Logs is an interface that receives plog.Logs, processes it
 // as needed, and sends it to the next processing node if any or to the destination.
-type Logs = Consumer[plog.Logs]
+type Logs interface {
+	consumer[plog.Logs]
+
+	// deprecated: use Logs.Consume instead
+	ConsumeLogs(ctx context.Context, md plog.Logs) error
+}
+
+type baseLogs struct {
+	*baseConsumer[plog.Logs]
+}
+
+func (m baseLogs) ConsumeLogs(ctx context.Context, md plog.Logs) error {
+	return m.Consume(ctx, md)
+}
 
 // ConsumeLogsFunc is a helper function that is similar to ConsumeLogs.
-type ConsumeLogsFunc = ConsumeFunc[plog.Logs]
+type ConsumeLogsFunc = consumeFunc[plog.Logs]
 
 // NewLogs returns a Logs configured with the provided options.
-var NewLogs = NewConsumer[plog.Logs]
+func NewLogs(consume ConsumeLogsFunc, options ...Option) (Logs, error) {
+	if consume == nil {
+		return nil, errNilFunc
+	}
+	c, err := newConsumer(consume, options...)
+
+	if err != nil {
+		return nil, err
+	}
+
+	bc := c.(baseConsumer[plog.Logs])
+	return &baseLogs{
+		baseConsumer: &bc,
+	}, nil
+}
