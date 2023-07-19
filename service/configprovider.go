@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package otelcol // import "go.opentelemetry.io/collector/otelcol"
+package service // import "go.opentelemetry.io/collector/service"
 
 import (
 	"context"
@@ -110,7 +110,8 @@ func (cm *configProvider) Get(ctx context.Context, factories Factories) (*Config
 		Exporters:  cfg.Exporters.Configs(),
 		Connectors: cfg.Connectors.Configs(),
 		Extensions: cfg.Extensions.Configs(),
-		Service:    cfg.Service,
+		Telemetry:  cfg.Telemetry,
+		// Metrics:    cfg.Service.Metrics,
 	}, nil
 }
 
@@ -131,7 +132,7 @@ func (cm *configProvider) GetConfmap(ctx context.Context) (*confmap.Conf, error)
 	return conf, nil
 }
 
-func newDefaultConfigProviderSettings(uris []string) ConfigProviderSettings {
+func NewDefaultConfigProviderSettings(uris []string) ConfigProviderSettings {
 	return ConfigProviderSettings{
 		ResolverSettings: confmap.ResolverSettings{
 			URIs:       uris,

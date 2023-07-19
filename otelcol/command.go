@@ -40,11 +40,6 @@ func newCollectorWithFlags(set CollectorSettings, flags *flag.FlagSet) (*Collect
 			return nil, errors.New("at least one config flag must be provided")
 		}
 
-		var err error
-		set.ConfigProvider, err = NewConfigProvider(newDefaultConfigProviderSettings(configFlags))
-		if err != nil {
-			return nil, err
-		}
 	}
 	return NewCollector(set)
 }

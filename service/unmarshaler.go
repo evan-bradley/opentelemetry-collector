@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package otelcol // import "go.opentelemetry.io/collector/otelcol"
+package service // import "go.opentelemetry.io/collector/service"
 
 import (
 	"go.uber.org/zap/zapcore"
@@ -11,10 +11,9 @@ import (
 	"go.opentelemetry.io/collector/connector"
 	"go.opentelemetry.io/collector/exporter"
 	"go.opentelemetry.io/collector/extension"
-	"go.opentelemetry.io/collector/otelcol/internal/configunmarshaler"
 	"go.opentelemetry.io/collector/processor"
 	"go.opentelemetry.io/collector/receiver"
-	"go.opentelemetry.io/collector/service"
+	"go.opentelemetry.io/collector/service/internal/configunmarshaler"
 	"go.opentelemetry.io/collector/service/telemetry"
 )
 
@@ -24,7 +23,7 @@ type configSettings struct {
 	Exporters  *configunmarshaler.Configs[exporter.Factory]  `mapstructure:"exporters"`
 	Connectors *configunmarshaler.Configs[connector.Factory] `mapstructure:"connectors"`
 	Extensions *configunmarshaler.Configs[extension.Factory] `mapstructure:"extensions"`
-	Service    service.Config                                `mapstructure:"service"`
+	Telemetry  telemetry.Config                              `mapstructure:"service"`
 }
 
 // unmarshal the configSettings from a confmap.Conf.
@@ -37,27 +36,24 @@ func unmarshal(v *confmap.Conf, factories Factories) (*configSettings, error) {
 		Exporters:  configunmarshaler.NewConfigs(factories.Exporters),
 		Connectors: configunmarshaler.NewConfigs(factories.Connectors),
 		Extensions: configunmarshaler.NewConfigs(factories.Extensions),
-		// TODO: Add a component.ServiceFactory to allow this to be defined by the Service.
-		Service: service.Config{
-			Telemetry: telemetry.Config{
-				Logs: telemetry.LogsConfig{
-					Level:       zapcore.InfoLevel,
-					Development: false,
-					Encoding:    "console",
-					Sampling: &telemetry.LogsSamplingConfig{
-						Initial:    100,
-						Thereafter: 100,
-					},
-					OutputPaths:       []string{"stderr"},
-					ErrorOutputPaths:  []string{"stderr"},
-					DisableCaller:     false,
-					DisableStacktrace: false,
-					InitialFields:     map[string]any(nil),
+		Telemetry: telemetry.Config{
+			Logs: telemetry.LogsConfig{
+				Level:       zapcore.InfoLevel,
+				Development: false,
+				Encoding:    "console",
+				Sampling: &telemetry.LogsSamplingConfig{
+					Initial:    100,
+					Thereafter: 100,
 				},
-				Metrics: telemetry.MetricsConfig{
-					Level:   configtelemetry.LevelBasic,
-					Address: ":8888",
-				},
+				OutputPaths:       []string{"stderr"},
+				ErrorOutputPaths:  []string{"stderr"},
+				DisableCaller:     false,
+				DisableStacktrace: false,
+				InitialFields:     map[string]any(nil),
+			},
+			Metrics: telemetry.MetricsConfig{
+				Level:   configtelemetry.LevelBasic,
+				Address: ":8888",
 			},
 		},
 	}

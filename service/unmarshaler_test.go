@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package otelcol
+package service
 
 import (
 	"testing"
@@ -11,7 +11,6 @@ import (
 	"go.uber.org/zap"
 
 	"go.opentelemetry.io/collector/confmap"
-	"go.opentelemetry.io/collector/service"
 	"go.opentelemetry.io/collector/service/pipelines"
 	"go.opentelemetry.io/collector/service/telemetry"
 )
@@ -200,7 +199,7 @@ func TestServiceUnmarshalError(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.conf.Unmarshal(&service.Config{}, confmap.WithErrorUnused())
+			err := tt.conf.Unmarshal(&Config{}, confmap.WithErrorUnused())
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.expectError)
 		})
