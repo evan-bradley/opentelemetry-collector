@@ -6,6 +6,7 @@ package configunmarshaler // import "go.opentelemetry.io/collector/otelcol/inter
 import (
 	"fmt"
 	"reflect"
+	"strings"
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/confmap"
@@ -13,12 +14,15 @@ import (
 
 type Configs[F component.Factory] struct {
 	cfgs map[component.ID]component.Config
+	// Map of processor -> component `type/name` -> config
+	incomplete map[string]map[component.ID]map[string]any
 
-	factories map[component.Type]F
+	factories         map[component.Type]F
+	processorPrefixes []string
 }
 
-func NewConfigs[F component.Factory](factories map[component.Type]F) *Configs[F] {
-	return &Configs[F]{factories: factories}
+func NewConfigs[F component.Factory](factories map[component.Type]F, processorPrefixes []string) *Configs[F] {
+	return &Configs[F]{factories: factories, processorPrefixes: processorPrefixes}
 }
 
 func (c *Configs[F]) Unmarshal(conf *confmap.Conf) error {
@@ -34,19 +38,28 @@ func (c *Configs[F]) Unmarshal(conf *confmap.Conf) error {
 		// Find factory based on component kind and type that we read from config source.
 		factory, ok := c.factories[id.Type()]
 		if !ok {
-			return errorUnknownType(id, reflect.ValueOf(c.factories).MapKeys())
+			// The component isn't known to us right now, but may get expanded later.
+			for _, pp := range c.processorPrefixes {
+				if strings.HasPrefix(id.String(), pp) {
+					if c.incomplete[pp] == nil {
+						c.incomplete[pp] = map[component.ID]map[string]any{}
+					}
+
+					c.incomplete[pp][id] = value
+				}
+			}
+		} else {
+			// Create the default config for this component.
+			cfg := factory.CreateDefaultConfig()
+
+			// Now that the default config struct is created we can Unmarshal into it,
+			// and it will apply user-defined config on top of the default.
+			if err := component.UnmarshalConfig(confmap.NewFromStringMap(value), cfg); err != nil {
+				return errorUnmarshalError(id, err)
+			}
+
+			c.cfgs[id] = cfg
 		}
-
-		// Create the default config for this component.
-		cfg := factory.CreateDefaultConfig()
-
-		// Now that the default config struct is created we can Unmarshal into it,
-		// and it will apply user-defined config on top of the default.
-		if err := component.UnmarshalConfig(confmap.NewFromStringMap(value), cfg); err != nil {
-			return errorUnmarshalError(id, err)
-		}
-
-		c.cfgs[id] = cfg
 	}
 
 	return nil
@@ -54,6 +67,10 @@ func (c *Configs[F]) Unmarshal(conf *confmap.Conf) error {
 
 func (c *Configs[F]) Configs() map[component.ID]component.Config {
 	return c.cfgs
+}
+
+func (c *Configs[F]) Incomplete() map[string]map[component.ID]map[string]any {
+	return c.incomplete
 }
 
 func errorUnknownType(id component.ID, factories []reflect.Value) error {

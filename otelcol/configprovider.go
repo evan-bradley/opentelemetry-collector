@@ -5,8 +5,10 @@ package otelcol // import "go.opentelemetry.io/collector/otelcol"
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/confmap"
 	"go.opentelemetry.io/collector/confmap/converter/expandconverter"
 	"go.opentelemetry.io/collector/confmap/provider/envprovider"
@@ -147,4 +149,57 @@ func makeMapProvidersMap(providers ...confmap.Provider) map[string]confmap.Provi
 		ret[provider.Scheme()] = provider
 	}
 	return ret
+}
+
+type templateProcessor struct{}
+
+type templateConfig struct {
+	Receivers  map[component.ID]any       `yaml:"receivers,omitempty"`
+	Processors map[component.ID]any       `yaml:"processors,omitempty"`
+	Pipelines  map[string]partialPipeline `yaml:"pipelines,omitempty"`
+}
+
+type partialPipeline struct {
+	Receivers  []component.ID `yaml:"receivers,omitempty"`
+	Processors []component.ID `yaml:"processors,omitempty"`
+}
+
+func (t *templateProcessor) Prefix() string {
+	return "template"
+}
+
+// TODO Is this necessary?
+func (t *templateProcessor) ComponentConfig() any {
+	return map[string]any{}
+}
+
+func (t *templateProcessor) ProcessorConfig() any {
+	return struct{}{}
+}
+
+func (t *templateProcessor) Process(pc *PartialConfig, factories Factories, config any) error {
+	tc, ok := config.(templateConfig)
+
+	if !ok {
+		return errors.New("bad config")
+	}
+
+	if factories.Connectors["forward"] == nil {
+		return errors.New("forward connector is required for the template processor")
+	}
+
+	for i, c := range pc.Receivers {
+		// Take out the template/ name
+		conf := c.(map[string]any)
+
+		f := factories.Receivers[i.Type()]
+		cfg := f.CreateDefaultConfig()
+
+		// Put in something else
+		if err := component.UnmarshalConfig(confmap.NewFromStringMap(conf), cfg); err != nil {
+			return errors.New("ayyo")
+		}
+	}
+
+	return nil
 }
