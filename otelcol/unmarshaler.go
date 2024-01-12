@@ -4,6 +4,8 @@
 package otelcol // import "go.opentelemetry.io/collector/otelcol"
 
 import (
+	"fmt"
+	"text/template"
 	"time"
 
 	"go.uber.org/zap/zapcore"
@@ -21,7 +23,7 @@ import (
 	"go.opentelemetry.io/collector/service/telemetry"
 )
 
-type configSettings struct {
+type ConfigSettings struct {
 	Receivers  *configunmarshaler.Configs[receiver.Factory]  `mapstructure:"receivers"`
 	Processors *configunmarshaler.Configs[processor.Factory] `mapstructure:"processors"`
 	Exporters  *configunmarshaler.Configs[exporter.Factory]  `mapstructure:"exporters"`
@@ -32,9 +34,9 @@ type configSettings struct {
 
 // unmarshal the configSettings from a confmap.Conf.
 // After the config is unmarshalled, `Validate()` must be called to validate.
-func unmarshal(v *confmap.Conf, factories Factories, processors []ConfigProcessor) (*configSettings, error) {
+func Unmarshal(v *confmap.Conf, factories Factories, converters []ConfigConverter) (*Config, error) {
 	// Unmarshal top level sections and validate.
-	cfg := &configSettings{
+	cfg := &ConfigSettings{
 		Receivers:  configunmarshaler.NewConfigs(factories.Receivers),
 		Processors: configunmarshaler.NewConfigs(factories.Processors),
 		Exporters:  configunmarshaler.NewConfigs(factories.Exporters),
@@ -67,48 +69,75 @@ func unmarshal(v *confmap.Conf, factories Factories, processors []ConfigProcesso
 		},
 	}
 
+	converterConfigs := map[string]any{}
+	vMap := v.ToStringMap()
+
+	for _, c := range converters {
+		name, conf := c.ConverterConfig()
+		if v.IsSet(name) {
+			sub, err := v.Sub(name)
+			if err != nil {
+				return nil, err
+			}
+			var str string
+			sub.Marshal(str)
+			fmt.Println(str)
+			// TODO fix this
+			// if name == "templates" {
+			// 	converterConfigs[name], _ = parseTemplates
+			// }
+			if err := sub.Unmarshal(&conf); err != nil {
+				fmt.Println("hi")
+				return nil, err
+			}
+			converterConfigs[name] = conf
+
+		}
+		delete(vMap, name)
+	}
+
 	// Unmarshal the config into a partial form.
-	if err := v.Unmarshal(&cfg); err != nil {
+	if err := confmap.NewFromStringMap(vMap).Unmarshal(&cfg); err != nil {
 		return nil, err
 	}
 
-	// TODO Loop over processors and apply them to configSettings
-	for _, p := range processors {
-		inc := cfg.Processors.Incomplete()
-		for _, incVal := range inc {
-			key, procConf := p.ProcessorConfig()
-			sub, _ := v.Sub(key)
-			_ = sub.Unmarshal(&procConf)
-			p.Process(&PartialConfig{
-				Receivers:  cfg.Receivers.Configs(),
-				Processors: cfg.Processors.Configs(),
-				Exporters:  cfg.Exporters.Configs(),
-				Connectors: cfg.Connectors.Configs(),
-				Extensions: cfg.Extensions.Configs(),
-				Service:    cfg.Service,
-			}, factories, procConf)
-		}
+	config := &Config{
+		Receivers:  cfg.Receivers.Configs(),
+		Processors: cfg.Processors.Configs(),
+		Exporters:  cfg.Exporters.Configs(),
+		Connectors: cfg.Connectors.Configs(),
+		Extensions: cfg.Extensions.Configs(),
+		Service:    cfg.Service,
 	}
 
-	return cfg, nil
+	// TODO Loop over processors and apply them to configSettings
+	for _, c := range converters {
+		name, _ := c.ConverterConfig()
+		if err := c.Convert(config, factories, converterConfigs[name]); err != nil {
+			return config, err
+		}
+
+	}
+
+	return config, nil
 }
 
-type ConfigProcessor interface {
+type ConfigConverter interface {
 	// Prefix for configs like "template/"
-	Prefix() string
+	// Prefix() string
 
 	// Config type for component configs that need
 	// processing like `template/my_receiver`
-	ComponentConfig() any
+	// ComponentConfig() any
 
 	// Key and type for the processor's config (e.g. "templates" and `templatesConfig`)
-	ProcessorConfig() (string, any)
+	ConverterConfig() (string, any)
 
 	// Handles configs starting with the processor's prefix
 	// given the available factories and its config.
 	// All instances of the ComponentConfig type should be
 	// replaced by component.Config when this function returns.
-	Process(pc *PartialConfig, factories Factories, config any) error
+	Convert(c *Config, factories Factories, config any) error
 }
 
 type PartialConfig struct {
@@ -118,4 +147,37 @@ type PartialConfig struct {
 	Extensions map[component.ID]component.Config // Factory or types returned by ConfigProcessor.ComponentConfig()
 	Connectors map[component.ID]component.Config // Factory or types returned by ConfigProcessor.ComponentConfig()
 	Service    service.Config                    // Some type that enables accessing/creating pipelines for the case of templating
+}
+
+func parseTemplates(conf *confmap.Conf) (map[string]any, error) {
+	if !conf.IsSet("templates") {
+		return nil, nil
+	}
+
+	templatesMap, ok := conf.ToStringMap()["templates"].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("'templates' must be a map")
+	}
+	if templatesMap["receivers"] == nil {
+		return nil, fmt.Errorf("'templates' must contain a 'receivers' section")
+	}
+
+	receiverTemplates, ok := templatesMap["receivers"].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("'templates::receivers' must be a map")
+	}
+
+	newTempl := map[string]*template.Template{}
+	for templateType, templateVal := range receiverTemplates {
+		templateStr, ok := templateVal.(string)
+		if !ok {
+			return nil, fmt.Errorf("'templates::receivers::%s' must be a string", templateType)
+		}
+		parsedTemplate, err := template.New(templateType).Parse(templateStr)
+		if err != nil {
+			return nil, err
+		}
+		newTempl[templateType] = parsedTemplate
+	}
+	return receiverTemplates, nil
 }

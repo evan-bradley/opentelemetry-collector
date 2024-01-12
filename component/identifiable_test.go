@@ -31,6 +31,10 @@ func TestUnmarshalText(t *testing.T) {
 			expectedID: ID{typeVal: "valid_type", nameVal: "valid_name"},
 		},
 		{
+			idStr:      "whoknows/valid_type/valid_name",
+			expectedID: ID{typeVal: "whoknows", nameVal: "valid_type/valid_name"},
+		},
+		{
 			idStr:      "   valid_type   /   valid_name  ",
 			expectedID: ID{typeVal: "valid_type", nameVal: "valid_name"},
 		},

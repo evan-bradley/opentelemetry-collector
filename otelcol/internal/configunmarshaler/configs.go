@@ -6,7 +6,6 @@ package configunmarshaler // import "go.opentelemetry.io/collector/otelcol/inter
 import (
 	"fmt"
 	"reflect"
-	"strings"
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/confmap"
@@ -17,12 +16,12 @@ type Configs[F component.Factory] struct {
 	// Map of processor -> component `type/name` -> config
 	incomplete map[string]map[component.ID]map[string]any
 
-	factories         map[component.Type]F
-	processorPrefixes []string
+	factories map[component.Type]F
+	// processorPrefixes []string
 }
 
-func NewConfigs[F component.Factory](factories map[component.Type]F, processorPrefixes []string) *Configs[F] {
-	return &Configs[F]{factories: factories, processorPrefixes: processorPrefixes}
+func NewConfigs[F component.Factory](factories map[component.Type]F) *Configs[F] {
+	return &Configs[F]{factories: factories}
 }
 
 func (c *Configs[F]) Unmarshal(conf *confmap.Conf) error {
@@ -39,15 +38,16 @@ func (c *Configs[F]) Unmarshal(conf *confmap.Conf) error {
 		factory, ok := c.factories[id.Type()]
 		if !ok {
 			// The component isn't known to us right now, but may get expanded later.
-			for _, pp := range c.processorPrefixes {
-				if strings.HasPrefix(id.String(), pp) {
-					if c.incomplete[pp] == nil {
-						c.incomplete[pp] = map[component.ID]map[string]any{}
-					}
+			// for _, pp := range c.processorPrefixes {
+			// 	if strings.HasPrefix(id.String(), pp) {
+			// 		if c.incomplete[pp] == nil {
+			// 			c.incomplete[pp] = map[component.ID]map[string]any{}
+			// 		}
 
-					c.incomplete[pp][id] = value
-				}
-			}
+			// 		c.incomplete[pp][id] = value
+			// 	}
+			// }
+			c.cfgs[id] = value
 		} else {
 			// Create the default config for this component.
 			cfg := factory.CreateDefaultConfig()

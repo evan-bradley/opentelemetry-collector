@@ -5,10 +5,8 @@ package otelcol // import "go.opentelemetry.io/collector/otelcol"
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
-	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/confmap"
 	"go.opentelemetry.io/collector/confmap/converter/expandconverter"
 	"go.opentelemetry.io/collector/confmap/provider/envprovider"
@@ -16,6 +14,7 @@ import (
 	"go.opentelemetry.io/collector/confmap/provider/httpprovider"
 	"go.opentelemetry.io/collector/confmap/provider/httpsprovider"
 	"go.opentelemetry.io/collector/confmap/provider/yamlprovider"
+	"gopkg.in/yaml.v3"
 )
 
 // ConfigProvider provides the service configuration.
@@ -67,6 +66,8 @@ type ConfmapProvider interface {
 
 type configProvider struct {
 	mapResolver *confmap.Resolver
+
+	converters []ConfigConverter
 }
 
 var _ ConfigProvider = &configProvider{}
@@ -76,6 +77,8 @@ var _ ConfmapProvider = &configProvider{}
 type ConfigProviderSettings struct {
 	// ResolverSettings are the settings to configure the behavior of the confmap.Resolver.
 	ResolverSettings confmap.ResolverSettings
+
+	converters []ConfigConverter
 }
 
 // NewConfigProvider returns a new ConfigProvider that provides the service configuration:
@@ -92,6 +95,7 @@ func NewConfigProvider(set ConfigProviderSettings) (ConfigProvider, error) {
 
 	return &configProvider{
 		mapResolver: mr,
+		converters:  set.converters,
 	}, nil
 }
 
@@ -101,19 +105,15 @@ func (cm *configProvider) Get(ctx context.Context, factories Factories) (*Config
 		return nil, fmt.Errorf("cannot resolve the configuration: %w", err)
 	}
 
-	var cfg *configSettings
-	if cfg, err = unmarshal(conf, factories); err != nil {
+	var cfg *Config
+	if cfg, err = Unmarshal(conf, factories, cm.converters); err != nil {
 		return nil, fmt.Errorf("cannot unmarshal the configuration: %w", err)
 	}
 
-	return &Config{
-		Receivers:  cfg.Receivers.Configs(),
-		Processors: cfg.Processors.Configs(),
-		Exporters:  cfg.Exporters.Configs(),
-		Connectors: cfg.Connectors.Configs(),
-		Extensions: cfg.Extensions.Configs(),
-		Service:    cfg.Service,
-	}, nil
+	out, _ := yaml.Marshal(cfg)
+	fmt.Println(string(out))
+
+	return cfg, nil
 }
 
 func (cm *configProvider) Watch() <-chan error {
@@ -151,55 +151,55 @@ func makeMapProvidersMap(providers ...confmap.Provider) map[string]confmap.Provi
 	return ret
 }
 
-type templateProcessor struct{}
+// type templateProcessor struct{}
 
-type templateConfig struct {
-	Receivers  map[component.ID]any       `yaml:"receivers,omitempty"`
-	Processors map[component.ID]any       `yaml:"processors,omitempty"`
-	Pipelines  map[string]partialPipeline `yaml:"pipelines,omitempty"`
-}
+// type templateConfig struct {
+// 	Receivers  map[component.ID]any       `yaml:"receivers,omitempty"`
+// 	Processors map[component.ID]any       `yaml:"processors,omitempty"`
+// 	Pipelines  map[string]partialPipeline `yaml:"pipelines,omitempty"`
+// }
 
-type partialPipeline struct {
-	Receivers  []component.ID `yaml:"receivers,omitempty"`
-	Processors []component.ID `yaml:"processors,omitempty"`
-}
+// type partialPipeline struct {
+// 	Receivers  []component.ID `yaml:"receivers,omitempty"`
+// 	Processors []component.ID `yaml:"processors,omitempty"`
+// }
 
-func (t *templateProcessor) Prefix() string {
-	return "template"
-}
+// func (t *templateProcessor) Prefix() string {
+// 	return "template"
+// }
 
-// TODO Is this necessary?
-func (t *templateProcessor) ComponentConfig() any {
-	return map[string]any{}
-}
+// // TODO Is this necessary?
+// func (t *templateProcessor) ComponentConfig() any {
+// 	return map[string]any{}
+// }
 
-func (t *templateProcessor) ProcessorConfig() any {
-	return struct{}{}
-}
+// func (t *templateProcessor) ProcessorConfig() any {
+// 	return struct{}{}
+// }
 
-func (t *templateProcessor) Process(pc *PartialConfig, factories Factories, config any) error {
-	tc, ok := config.(templateConfig)
+// func (t *templateProcessor) Process(pc *PartialConfig, factories Factories, config any) error {
+// 	tc, ok := config.(templateConfig)
 
-	if !ok {
-		return errors.New("bad config")
-	}
+// 	if !ok {
+// 		return errors.New("bad config")
+// 	}
 
-	if factories.Connectors["forward"] == nil {
-		return errors.New("forward connector is required for the template processor")
-	}
+// 	if factories.Connectors["forward"] == nil {
+// 		return errors.New("forward connector is required for the template processor")
+// 	}
 
-	for i, c := range pc.Receivers {
-		// Take out the template/ name
-		conf := c.(map[string]any)
+// 	for i, c := range pc.Receivers {
+// 		// Take out the template/ name
+// 		conf := c.(map[string]any)
 
-		f := factories.Receivers[i.Type()]
-		cfg := f.CreateDefaultConfig()
+// 		f := factories.Receivers[i.Type()]
+// 		cfg := f.CreateDefaultConfig()
 
-		// Put in something else
-		if err := component.UnmarshalConfig(confmap.NewFromStringMap(conf), cfg); err != nil {
-			return errors.New("ayyo")
-		}
-	}
+// 		// Put in something else
+// 		if err := component.UnmarshalConfig(confmap.NewFromStringMap(conf), cfg); err != nil {
+// 			return errors.New("ayyo")
+// 		}
+// 	}
 
-	return nil
-}
+// 	return nil
+// }

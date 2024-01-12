@@ -41,7 +41,9 @@ func newCollectorWithFlags(set CollectorSettings, flags *flag.FlagSet) (*Collect
 		}
 
 		var err error
-		set.ConfigProvider, err = NewConfigProvider(newDefaultConfigProviderSettings(configFlags))
+		sett := newDefaultConfigProviderSettings(configFlags)
+		sett.converters = set.Converters
+		set.ConfigProvider, err = NewConfigProvider(sett)
 		if err != nil {
 			return nil, err
 		}

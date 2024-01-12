@@ -75,6 +75,8 @@ type CollectorSettings struct {
 
 	// SkipSettingGRPCLogger avoids setting the grpc logger
 	SkipSettingGRPCLogger bool
+
+	Converters []ConfigConverter
 }
 
 // (Internal note) Collector Lifecycle:
