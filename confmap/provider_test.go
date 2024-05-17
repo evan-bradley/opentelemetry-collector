@@ -35,3 +35,27 @@ func TestNewRetrievedUnsupportedType(t *testing.T) {
 	_, err := NewRetrieved(errors.New("my error"))
 	require.Error(t, err)
 }
+
+func TestNewProviderFactory(t *testing.T) {
+	factory := NewProviderFactory(newTestProvider)
+	p := factory.Create(ProviderSettings{})
+	assert.NotNil(t, p)
+}
+
+func newTestProvider(ProviderSettings) Provider {
+	return testProvider{}
+}
+
+type testProvider struct{}
+
+func (t testProvider) Retrieve(ctx context.Context, uri string, watcher WatcherFunc) (*Retrieved, error) {
+	return nil, nil
+}
+
+func (t testProvider) Scheme() string {
+	return ""
+}
+
+func (t testProvider) Shutdown(ctx context.Context) error {
+	return nil
+}
