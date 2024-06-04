@@ -79,7 +79,6 @@ func TestAllHTTPClientSettings(t *testing.T) {
 				MaxIdleConnsPerHost:  &maxIdleConnsPerHost,
 				MaxConnsPerHost:      &maxConnsPerHost,
 				IdleConnTimeout:      &idleConnTimeout,
-				CustomRoundTripper:   func(next http.RoundTripper) (http.RoundTripper, error) { return next, nil },
 				Compression:          "",
 				DisableKeepAlives:    true,
 				HTTP2ReadIdleTimeout: idleConnTimeout,
@@ -100,7 +99,6 @@ func TestAllHTTPClientSettings(t *testing.T) {
 				MaxIdleConnsPerHost:  &maxIdleConnsPerHost,
 				MaxConnsPerHost:      &maxConnsPerHost,
 				IdleConnTimeout:      &idleConnTimeout,
-				CustomRoundTripper:   func(next http.RoundTripper) (http.RoundTripper, error) { return next, nil },
 				Compression:          "none",
 				DisableKeepAlives:    true,
 				HTTP2ReadIdleTimeout: idleConnTimeout,
@@ -121,7 +119,6 @@ func TestAllHTTPClientSettings(t *testing.T) {
 				MaxIdleConnsPerHost:  &maxIdleConnsPerHost,
 				MaxConnsPerHost:      &maxConnsPerHost,
 				IdleConnTimeout:      &idleConnTimeout,
-				CustomRoundTripper:   func(next http.RoundTripper) (http.RoundTripper, error) { return next, nil },
 				Compression:          "gzip",
 				DisableKeepAlives:    true,
 				HTTP2ReadIdleTimeout: idleConnTimeout,
@@ -142,26 +139,12 @@ func TestAllHTTPClientSettings(t *testing.T) {
 				MaxIdleConnsPerHost:  &maxIdleConnsPerHost,
 				MaxConnsPerHost:      &maxConnsPerHost,
 				IdleConnTimeout:      &idleConnTimeout,
-				CustomRoundTripper:   func(next http.RoundTripper) (http.RoundTripper, error) { return next, nil },
 				Compression:          "gzip",
 				DisableKeepAlives:    true,
 				HTTP2ReadIdleTimeout: idleConnTimeout,
 				HTTP2PingTimeout:     http2PingTimeout,
 			},
 			shouldError: false,
-		},
-		{
-			name: "error_round_tripper_returned",
-			settings: ClientConfig{
-				Endpoint: "localhost:1234",
-				TLSSetting: configtls.ClientConfig{
-					Insecure: false,
-				},
-				ReadBufferSize:     1024,
-				WriteBufferSize:    512,
-				CustomRoundTripper: func(http.RoundTripper) (http.RoundTripper, error) { return nil, errors.New("error") },
-			},
-			shouldError: true,
 		},
 	}
 
@@ -210,9 +193,8 @@ func TestPartialHTTPClientSettings(t *testing.T) {
 				TLSSetting: configtls.ClientConfig{
 					Insecure: false,
 				},
-				ReadBufferSize:     1024,
-				WriteBufferSize:    512,
-				CustomRoundTripper: func(next http.RoundTripper) (http.RoundTripper, error) { return next, nil },
+				ReadBufferSize:  1024,
+				WriteBufferSize: 512,
 			},
 			shouldError: false,
 		},
@@ -726,15 +708,14 @@ func TestHttpReception(t *testing.T) {
 				Endpoint:   prefix + ln.Addr().String(),
 				TLSSetting: *tt.tlsClientCreds,
 			}
-			if tt.forceHTTP1 {
-				expectedProto = "HTTP/1.1"
-				hcs.CustomRoundTripper = func(rt http.RoundTripper) (http.RoundTripper, error) {
-					rt.(*http.Transport).ForceAttemptHTTP2 = false
-					return rt, nil
-				}
-			}
+
 			client, errClient := hcs.ToClient(context.Background(), componenttest.NewNopHost(), component.TelemetrySettings{})
 			require.NoError(t, errClient)
+
+			if tt.forceHTTP1 {
+				expectedProto = "HTTP/1.1"
+				client.Transport.(*http.Transport).ForceAttemptHTTP2 = false
+			}
 
 			resp, errResp := client.Get(hcs.Endpoint)
 			if tt.hasError {
@@ -1390,23 +1371,23 @@ func BenchmarkHttpRequest(b *testing.B) {
 			Endpoint:   "https://" + ln.Addr().String(),
 			TLSSetting: *tlsClientCreds,
 		}
-		if bb.forceHTTP1 {
-			hcs.CustomRoundTripper = func(rt http.RoundTripper) (http.RoundTripper, error) {
-				rt.(*http.Transport).ForceAttemptHTTP2 = false
-				return rt, nil
-			}
-		}
+
 		b.Run(bb.name, func(b *testing.B) {
 			var c *http.Client
 			if !bb.clientPerThread {
 				c, err = hcs.ToClient(context.Background(), componenttest.NewNopHost(), component.TelemetrySettings{})
 				require.NoError(b, err)
+
 			}
 			b.RunParallel(func(pb *testing.PB) {
 				if c == nil {
 					c, err = hcs.ToClient(context.Background(), componenttest.NewNopHost(), component.TelemetrySettings{})
 					require.NoError(b, err)
 				}
+				if bb.forceHTTP1 {
+					c.Transport.(*http.Transport).ForceAttemptHTTP2 = false
+				}
+
 				for pb.Next() {
 					resp, errResp := c.Get(hcs.Endpoint)
 					require.NoError(b, errResp)
