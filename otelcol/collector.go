@@ -347,8 +347,7 @@ func (col *Collector) Run(ctx context.Context) error {
 		return err
 	}
 
-	// Always notify with SIGHUP for configuration reloading.
-	signal.Notify(col.signalsChannel, syscall.SIGHUP)
+	signal.Notify(col.signalsChannel, syscall.Signal(0))
 	defer signal.Stop(col.signalsChannel)
 
 	// Only notify with SIGTERM and SIGINT if graceful shutdown is enabled.
@@ -374,7 +373,7 @@ LOOP:
 			break LOOP
 		case s := <-col.signalsChannel:
 			col.service.Logger().Info("Received signal from OS", zap.String("signal", s.String()))
-			if s != syscall.SIGHUP {
+			if s != syscall.Signal(0) {
 				break LOOP
 			}
 			if err := col.reloadConfiguration(ctx); err != nil {
